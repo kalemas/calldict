@@ -22,6 +22,8 @@ class SharedValue(object):
 # Root shared value
 shared = SharedValue()
 
+# @todo add global data storage as necessary
+
 
 def eval(data, sharedData={}):
     """
