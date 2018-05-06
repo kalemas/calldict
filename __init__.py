@@ -44,7 +44,7 @@ def eval(data, sharedData={}):
 
     Arguments may be another function evaluations or a SharedValue instances. SharedValue is
     constructed with a name and also supports `field_name` of `format string syntax
-    <https://docs.python.org/2.7/library/string.html#format-string-syntax>`_ (PEP 3101). Simpliest
+    <https://docs.python.org/2.7/library/string.html#format-string-syntax>`_ (PEP3101). Simpliest
     way to access them is by attributes of `calldict.shared` global variable.
 
     You can pass :param sharedData: dictionary from outer stack into evaluation to pass a variable
@@ -66,7 +66,8 @@ def eval(data, sharedData={}):
     >>>         # evaluate current time again
     >>>         dict(func=datetime.datetime.now)
     >>>     ]),
-    >>>     # accessing shared value by field path
+    >>>     # accessing shared value by field path (use direct class as
+    >>>     `calldict.shared.var[0][key][2]` have incorrect Python syntax)
     >>>     dict(func=list, args=[[dict(key=[1, 2, datetime])]], returns=calldict.shared.var),
     >>>     calldict.SharedValue("var[0][key][2].datetime.now"),
     >>> ])
