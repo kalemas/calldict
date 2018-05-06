@@ -1,13 +1,11 @@
-
-import os
+"""
+Call functions stored in a dictionaries.
+"""
 import string
-import sys
-
-
-sys.path.append(os.path.dirname(__file__))
 
 
 class SharedValue(object):
+    """Class to handle shared data identificators during evaluation."""
     def __init__(self, name=None):
             self.name = name
 
@@ -21,17 +19,62 @@ class SharedValue(object):
         return v[:v.find(' object')] + '.' + self.name + '>'
 
 
-# root shared value
+# Root shared value
 shared = SharedValue()
 
 
-def call(data, sharedData={}):
+def eval(data, sharedData={}):
+    """
+    Evaluate given :param data: and return result.
+
+    :param data: dict with following optional structure:
+        {
+            "func": function object that will be called
+            "args": list of arguments
+            "kwargs": dict of keyworded arguments
+            "returns": calldict.SharedValue instance or str of a name where the result of current
+                       evaluation will be stored in :param sharedData:
+            "evaluate": bool whether we need of prevent evaluation of sub structure
+        }
+
+    Only dictionaries with "func" keys are considered as a subject of evaluation, otherwise they
+    are considered as regular dictionaries and only nested data is evaluated.
+
+    Arguments may be another function evaluations or a SharedValue instances. SharedValue is
+    constructed with a name and also supports `field_name` of `format string syntax
+    <https://docs.python.org/2.7/library/string.html#format-string-syntax>`_ (PEP 3101). Simpliest
+    way to access them is by attributes of `calldict.shared` global variable.
+
+    You can pass :param sharedData: dictionary from outer stack into evaluation to pass a variable
+    or get evaluated shared values after evaluation.
+
+    If you need to do `eval` calls on several stages (with passing different :param sharedData: or
+    modify :param data: before next `eval`) you can prevent arguments and function itself to be
+    evaluated by passing `evaluate` key with value of `False` in :param data:.
+
+    Follwing code is valid and demonstrates work with shared data:
+    >>> import datetime
+    >>> calldict.eval([
+    >>>     # store current time in SharedValue("now")
+    >>>     dict(func=datetime.datetime.now, returns=calldict.shared.now),
+    >>>     # do a long operation
+    >>>     dict(func=range, args=[10000000]),
+    >>>     # evaluate substitution of saved time
+    >>>     dict(func=calldict.shared.now.__sub__, args=[
+    >>>         # evaluate current time again
+    >>>         dict(func=datetime.datetime.now)
+    >>>     ]),
+    >>>     # accessing shared value by field path
+    >>>     dict(func=list, args=[[dict(key=[1, 2, datetime])]], returns=calldict.shared.var),
+    >>>     calldict.SharedValue("var[0][key][2].datetime.now"),
+    >>> ])
+    """
     if isinstance(data, dict) and 'func' in data:
         pass
     elif isinstance(data, dict):
-        return dict([(k, call(v, sharedData=sharedData)) for k, v in data.iteritems()])
+        return dict([(k, eval(v, sharedData=sharedData)) for k, v in data.iteritems()])
     elif isinstance(data, list):
-        return [call(d, sharedData=sharedData) for d in data]
+        return [eval(d, sharedData=sharedData) for d in data]
     elif isinstance(data, SharedValue):
         try:
             # use well known format syntax to support attributes and indexes
@@ -46,30 +89,33 @@ def call(data, sharedData={}):
     if data.get('evaluate', True):
         # Evaluate data in sub structure
         data = data.copy()
-        data['args'] = [call(v, sharedData=sharedData) for v in data.get('args', [])]
-        data['kwargs'] = dict([(k, call(v, sharedData=sharedData)) for k, v in
+        data['args'] = [eval(v, sharedData=sharedData) for v in data.get('args', [])]
+        data['kwargs'] = dict([(k, eval(v, sharedData=sharedData)) for k, v in
                                data.get('kwargs', {}).iteritems()])
-        data['func'] = call(data['func'], sharedData=sharedData)
+        data['func'] = eval(data['func'], sharedData=sharedData)
 
     # Call itself
     r = data['func'](*data['args'], **data['kwargs'])
 
-    if 'return' in data:
+    if 'returns' in data:
         # support both, str and SharedValue instances
-        if isinstance(data['return'], SharedValue):
-            sharedData[data['return'].name] = r
+        if isinstance(data['returns'], SharedValue):
+            sharedData[data['returns'].name] = r
         else:
-            sharedData[data['return']] = r
+            sharedData[data['returns']] = r
     return r
 
 
 if __name__ == '__main__':
-    import yaml
-    import textwrap
     import pprint
+    import sys
+    import textwrap
+
+    import yaml
     import calldict
 
     def constructor(self, suffix, node):
+        """Simple YAML constructor to simplify definition."""
         moduleName, objectPath = self.construct_scalar(node).split(' ')
         __import__(moduleName)
         obj = sys.modules[moduleName]
@@ -79,22 +125,22 @@ if __name__ == '__main__':
 
     yaml.add_multi_constructor('!runtime', constructor)
 
-    # PyYAML with convenience tag added
-    pprint.pprint(calldict.call(yaml.load(textwrap.dedent("""
+    # PyYAML with custom convenience constructor
+    pprint.pprint(calldict.eval(yaml.load(textwrap.dedent("""
         -   func: !runtime __builtin__ open
             args:
             -   func: !runtime tempfile mktemp
                 kwargs:
                     suffix: .txt
-                return: !runtime calldict shared.path
+                returns: !runtime calldict shared.path
             -   w
-            return: !runtime calldict shared.file
+            returns: !runtime calldict shared.file
         -   func: !runtime __builtin__ list
             args:
             -   -   Hello
                 -   world
                 -   '!'
-            return: !runtime calldict shared.list
+            returns: !runtime calldict shared.list
         -   func: !runtime calldict shared.file.write
             args:
             -   func: !runtime __builtin__ str.format
@@ -109,17 +155,17 @@ if __name__ == '__main__':
             args:
             -   !runtime calldict shared.path
             -   r
-            return: !runtime calldict shared.file
+            returns: !runtime calldict shared.file
         -   func: !runtime calldict shared.file.read
         -   *close
     """))))
 
     # out of the box PyYAML (simplified):
-    pprint.pprint(calldict.call(yaml.load(textwrap.dedent("""
+    pprint.pprint(calldict.eval(yaml.load(textwrap.dedent("""
         -   func: !!python/name:tempfile.mktemp
             kwargs:
                 suffix: .txt
-            return: path
+            returns: path
         -   func: !!python/name:__builtin__.open
             args:
             -   !!python/object/apply:__builtin__.getattr
@@ -127,9 +173,9 @@ if __name__ == '__main__':
                 -   !!python/name:calldict.shared
                 -   path
             -   w
-            return: file
+            returns: file
         -   func:
-                func: !!python/name:calldict.call
+                func: !!python/name:calldict.eval
                 args:
                 -   args:
                     -   &file
@@ -142,7 +188,7 @@ if __name__ == '__main__':
             args: [Hello world!!!]
         -   &close
             func:
-                func: !!python/name:calldict.call
+                func: !!python/name:calldict.eval
                 args:
                 -   args:
                     -   *file
@@ -155,9 +201,9 @@ if __name__ == '__main__':
                 -   !!python/name:calldict.shared
                 -   path
             -   r
-            return: *file
+            returns: *file
         -   func:
-                func: !!python/name:calldict.call
+                func: !!python/name:calldict.eval
                 args:
                 -   args:
                     -   *file
