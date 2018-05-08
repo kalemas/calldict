@@ -1,5 +1,12 @@
 """
 Call functions stored in a dictionaries.
+
+- Hm, don't you want to programming in YAML or JSON?
+- Nope, but to mix high level configuration with callable objects. Many programming approaches
+  could be brought to setting up application configuration and to writing application engine.
+  Configuration let you to oversee application logic and quickly change its behavior without
+  digging into code. And using callable objects in it gives you maximum flexibility before magic
+  parameters that wrap those callables.
 """
 import string
 
@@ -23,6 +30,7 @@ class SharedValue(object):
 shared = SharedValue()
 
 # @todo add global data storage as necessary
+# @todo add threading support as necessary
 
 
 def eval(data, sharedData={}):
@@ -42,9 +50,9 @@ def eval(data, sharedData={}):
     Only dictionaries with "func" keys are considered as a subject of evaluation, otherwise they
     are considered as regular dictionaries and only nested data is evaluated.
 
-    Arguments may be another function evaluations or a SharedValue instances. SharedValue is
+    Arguments may be data, another function evaluations or a SharedValue instances. SharedValue is
     constructed with a name and also supports `field_name` of `format string syntax
-    <https://docs.python.org/2.7/library/string.html#format-string-syntax>`_ (PEP3101). Simpliest
+    <https://docs.python.org/2.7/library/string.html#format-string-syntax>`_ (PEP3101). Simplest
     way to access them is by attributes of `calldict.shared` global variable.
 
     You can pass :param sharedData: dictionary from outer stack into evaluation to pass a variable
@@ -54,7 +62,7 @@ def eval(data, sharedData={}):
     modify :param data: before next `eval`) you can prevent arguments and function itself to be
     evaluated by passing `evaluate` key with value of `False` in :param data:.
 
-    Follwing code is valid and demonstrates work with shared data:
+    Following code is valid and demonstrates work with shared data:
     >>> import datetime
     >>> calldict.eval([
     >>>     # store current time in SharedValue("now")
@@ -66,8 +74,8 @@ def eval(data, sharedData={}):
     >>>         # evaluate current time again
     >>>         dict(func=datetime.datetime.now)
     >>>     ]),
-    >>>     # accessing shared value by field path (use direct class as
-    >>>     `calldict.shared.var[0][key][2]` have incorrect Python syntax)
+    >>>     # accessing shared value by field path (use class constructor as
+    >>>     `calldict.shared.var[0][key][2]` is incorrect Python syntax)
     >>>     dict(func=list, args=[[dict(key=[1, 2, datetime])]], returns=calldict.shared.var),
     >>>     calldict.SharedValue("var[0][key][2].datetime.now"),
     >>> ])
@@ -138,20 +146,8 @@ if __name__ == '__main__':
                 returns: !runtime calldict shared.path
             -   w
             returns: !runtime calldict shared.file
-        -   func: !runtime __builtin__ list
-            args:
-            -   -   Hello
-                -   world
-                -   '!'
-            returns: !runtime calldict shared.list
         -   func: !runtime calldict shared.file.write
-            args:
-            -   func: !runtime __builtin__ str.format
-                args:
-                -   '{0} {1}{2}{2}{2}'
-                -   !runtime calldict shared.list[0]
-                -   !runtime calldict shared.list[1]
-                -   !runtime calldict shared.list[2]
+            args: [Hello world!!!]
         -   &close
             func: !runtime calldict shared.file.close
         -   func: !runtime __builtin__ open
@@ -163,7 +159,7 @@ if __name__ == '__main__':
         -   *close
     """))))
 
-    # out of the box PyYAML (simplified):
+    # out of the box PyYAML:
     pprint.pprint(calldict.eval(yaml.load(textwrap.dedent("""
         -   func: !!python/name:tempfile.mktemp
             kwargs:
