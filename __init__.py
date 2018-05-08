@@ -33,6 +33,17 @@ shared = SharedValue()
 # @todo add threading support as necessary
 
 
+def _sortData(data, getter=lambda x: x):
+    return sorted(
+        data,
+        # first we process dictionaries as they could be evaluations and return shared data
+        # last we process primitive types as they could be shared data references
+        key=lambda x:
+            0 if isinstance(getter(x), dict) else
+            1 if isinstance(getter(x), list) else 2
+    )
+
+
 def eval(data, sharedData={}):
     """
     Evaluate given :param data: and return result.
@@ -83,9 +94,10 @@ def eval(data, sharedData={}):
     if isinstance(data, dict) and 'func' in data:
         pass
     elif isinstance(data, dict):
-        return dict([(k, eval(v, sharedData=sharedData)) for k, v in data.iteritems()])
+        return dict([(k, eval(v, sharedData=sharedData)) for k, v in
+                     _sortData(data.iteritems(), lambda x: x[1])])
     elif isinstance(data, list):
-        return [eval(d, sharedData=sharedData) for d in data]
+        return [eval(d, sharedData=sharedData) for d in _sortData(data)]
     elif isinstance(data, SharedValue):
         try:
             # use well known format syntax to support attributes and indexes
