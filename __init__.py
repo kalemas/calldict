@@ -25,6 +25,9 @@ class SharedValue(object):
         v = super(SharedValue, self).__repr__()
         return v[:v.find(' object')] + '.' + self.name + '>'
 
+    def __deepcopy__(self, memo):
+        return SharedValue(self.name)
+
 
 # Root shared value
 shared = SharedValue()
