@@ -36,18 +36,22 @@ shared = SharedValue()
 # @todo add threading support as necessary
 
 
-def _sortData(data, getter=lambda x: x):
+def _sortData(items):
+    """
+    :param items: list of key, value tuples
+    :return:
+    """
     return sorted(
-        data,
+        items,
         # first we process dictionaries as they could be evaluations and return shared data
         # last we process primitive types as they could be shared data references
         key=lambda x:
-            0 if isinstance(getter(x), dict) else
-            1 if isinstance(getter(x), list) else 2
+            0 if isinstance(x[1], dict) else
+            1 if isinstance(x[1], list) else 2
     )
 
 
-def eval(data, sharedData={}):
+def eval(data, sharedData={}, memo=None):
     """
     Evaluate given :param data: and return result.
 
@@ -94,13 +98,26 @@ def eval(data, sharedData={}):
     >>>     calldict.SharedValue("var[0][key][2].datetime.now"),
     >>> ])
     """
+    if memo is None:
+        memo = dict()
     if isinstance(data, dict) and 'func' in data:
         pass
-    elif isinstance(data, dict):
-        return dict([(k, eval(v, sharedData=sharedData)) for k, v in
-                     _sortData(data.iteritems(), lambda x: x[1])])
-    elif isinstance(data, list):
-        return [eval(d, sharedData=sharedData) for d in _sortData(data)]
+    elif isinstance(data, dict) or isinstance(data, list):
+        # calldict implement kind of deepcopy behavior, we do not support it completely but use
+        # such way to handle recursive data
+        d = id(data)
+        if d in memo:
+            return memo[d]
+        if isinstance(data, dict):
+            y = type(data)()
+            items = _sortData(data.iteritems())
+        else:
+            y = data[:]
+            items = enumerate(data)
+        memo[d] = y
+        for k, v in items:
+            y[k] = eval(v, sharedData=sharedData, memo=memo)
+        return y
     elif isinstance(data, SharedValue):
         try:
             # use well known format syntax to support attributes and indexes
@@ -112,13 +129,15 @@ def eval(data, sharedData={}):
         return data
 
     # @todo make following parameter as integer to allow multilevel precessing
-    if data.get('evaluate', True):
-        # Evaluate data in sub structure
-        data = data.copy()
-        data['args'] = [eval(v, sharedData=sharedData) for v in data.get('args', [])]
-        data['kwargs'] = dict([(k, eval(v, sharedData=sharedData)) for k, v in
-                               data.get('kwargs', {}).iteritems()])
-        data['func'] = eval(data['func'], sharedData=sharedData)
+    if not data.get('evaluate', True):
+        return dict((x, y) for x, y in data.items() if x != 'evaluate')
+
+    # Evaluate data in sub structure
+    data = data.copy()
+    data['args'] = [eval(v, sharedData=sharedData, memo=memo) for v in data.get('args', [])]
+    data['kwargs'] = dict([(k, eval(v, sharedData=sharedData, memo=memo)) for k, v in
+                           data.get('kwargs', {}).iteritems()])
+    data['func'] = eval(data['func'], sharedData=sharedData, memo=memo)
 
     # Call itself
     r = data['func'](*data['args'], **data['kwargs'])
