@@ -36,22 +36,7 @@ shared = SharedValue()
 # @todo add threading support as necessary
 
 
-def _sortData(items):
-    """
-    :param items: list of key, value tuples
-    :return:
-    """
-    return sorted(
-        items,
-        # first we process dictionaries as they could be evaluations and return shared data
-        # last we process primitive types as they could be shared data references
-        key=lambda x:
-            0 if isinstance(x[1], dict) else
-            1 if isinstance(x[1], list) else 2
-    )
-
-
-def eval(data, sharedData={}, memo=None):
+def eval(data, sharedData=None, memo=None):
     """
     Evaluate given :param data: and return result.
 
@@ -100,6 +85,8 @@ def eval(data, sharedData={}, memo=None):
     """
     if memo is None:
         memo = dict()
+    if sharedData is None:
+        sharedData = dict()
     if isinstance(data, dict) and 'func' in data:
         pass
     elif isinstance(data, dict) or isinstance(data, list):
@@ -110,12 +97,17 @@ def eval(data, sharedData={}, memo=None):
             return memo[d]
         if isinstance(data, dict):
             y = type(data)()
-            items = _sortData(data.iteritems())
+            items = data.iteritems()
         else:
             y = data[:]
             items = enumerate(data)
         memo[d] = y
-        for k, v in items:
+        # first we process dictionaries as they could be evaluations and return shared data
+        # last we process primitive types as they could be shared data references
+        for k, v in sorted(items, key=lambda x:
+                           0 if isinstance(x[1], dict) else
+                           1 if isinstance(x[1], list) else 2
+                           ):
             y[k] = eval(v, sharedData=sharedData, memo=memo)
         return y
     elif isinstance(data, SharedValue):
