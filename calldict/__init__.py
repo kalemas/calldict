@@ -53,6 +53,7 @@ def eval(data, sharedData=None, memo=None):
                        evaluation will be stored in :param sharedData:
             "evaluate": bool whether we need of prevent evaluation of sub structure
         }
+        This parameter is passed by copying.
 
     Only dictionaries with "func" keys are considered as a subject of evaluation, otherwise they
     are considered as regular dictionaries and only nested data is evaluated.
@@ -138,12 +139,13 @@ def eval(data, sharedData=None, memo=None):
     # Call itself
     r = data['func'](*data['args'], **data['kwargs'])
 
+    if isinstance(r, SharedValue):
+        r = sharedData[r.name]
+
     if 'returns' in data:
-        # support both, str and SharedValue instances
-        if isinstance(data['returns'], SharedValue):
-            sharedData[data['returns'].name] = r
-        else:
-            sharedData[data['returns']] = r
+        for v in data['returns'] if isinstance(data['returns'], list) else [data['returns']]:
+            # support both, str and SharedValue instances
+            sharedData[v.name if isinstance(v, SharedValue) else v] = r
     return r
 
 
