@@ -102,7 +102,7 @@ def eval(data, sharedData=None, memo=None):
             return memo[d]
         if isinstance(data, dict):
             y = type(data)()
-            items = data.iteritems()
+            items = data.items()
         else:
             y = data[:]
             items = enumerate(data)
@@ -133,7 +133,7 @@ def eval(data, sharedData=None, memo=None):
     data = data.copy()
     data['args'] = [eval(v, sharedData=sharedData, memo=memo) for v in data.get('args', [])]
     data['kwargs'] = dict([(k, eval(v, sharedData=sharedData, memo=memo)) for k, v in
-                           data.get('kwargs', {}).iteritems()])
+                           data.get('kwargs', {}).items()])
     data['func'] = eval(data['func'], sharedData=sharedData, memo=memo)
 
     # Call itself

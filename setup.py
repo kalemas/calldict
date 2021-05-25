@@ -3,7 +3,7 @@ from distutils.core import setup
 setup(
   name='calldict',
   packages=['calldict'],
-  version='0.1',
+  version='0.3',
   description='Call functions stored in a dictionaries',
   author='Konstantin Maslyuk',
   author_email='kostyamaslyuk@gmail.com',
