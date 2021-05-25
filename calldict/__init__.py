@@ -36,6 +36,10 @@ shared = SharedValue()
 # @todo add threading support as necessary
 
 
+def callable(data):
+    return isinstance(data, dict) and 'func' in data
+
+
 def eval(data, sharedData=None, memo=None):
     """
     Evaluate given :param data: and return result.
@@ -87,7 +91,7 @@ def eval(data, sharedData=None, memo=None):
         memo = dict()
     if sharedData is None:
         sharedData = dict()
-    if isinstance(data, dict) and 'func' in data:
+    if callable(data):
         pass
     elif isinstance(data, dict) or isinstance(data, list):
         # calldict implement kind of deepcopy behavior, we do not support it completely but use
