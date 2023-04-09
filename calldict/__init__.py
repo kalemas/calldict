@@ -9,12 +9,13 @@ Call functions stored in a dictionaries.
   parameters that wrap those callables.
 """
 import string
+import warnings
 
 
 class SharedValue(object):
     """Class to handle shared data identificators during evaluation."""
     def __init__(self, name=None):
-            self.name = name
+        self.name = name
 
     def __getattr__(self, name):
         if self.name is None:
@@ -36,11 +37,17 @@ shared = SharedValue()
 # @todo add threading support as necessary
 
 
-def callable(data):
+def is_callable(data):
     return isinstance(data, dict) and 'func' in data
 
 
-def eval(data, sharedData=None, memo=None):
+def callable(data):
+    warnings.warn('calldict.callable renamed to is_callable',
+                  DeprecationWarning)
+    return is_callable(data)
+
+
+def eval(data, shared_data=None, sharedData=None, memo=None):
     """
     Evaluate given :param data: and return result.
 
@@ -50,7 +57,7 @@ def eval(data, sharedData=None, memo=None):
             "args": list of arguments
             "kwargs": dict of keyworded arguments
             "returns": calldict.SharedValue instance or str of a name where the result of current
-                       evaluation will be stored in :param sharedData:
+                       evaluation will be stored in :param shared_data:
             "evaluate": bool whether we need of prevent evaluation of sub structure
         }
         This parameter is passed by copying.
@@ -63,12 +70,12 @@ def eval(data, sharedData=None, memo=None):
     <https://docs.python.org/2.7/library/string.html#format-string-syntax>`_ (PEP3101). Simplest
     way to access them is by attributes of `calldict.shared` global variable.
 
-    You can pass :param sharedData: dictionary from outer stack into evaluation to pass a variable
+    You can pass :param shared_data: dictionary from outer stack into evaluation to pass a variable
     or get evaluated shared values after evaluation.
 
-    If you need to do `eval` calls on several stages (with passing different :param sharedData: or
-    modify :param data: before next `eval`) you can prevent arguments and function itself to be
-    evaluated by passing `evaluate` key with value of `False` in :param data:.
+    If you need to do `eval` calls on several stages (with passing different :param shared_data:
+    or modify :param data: before next `eval`) you can prevent arguments and function itself to
+    be evaluated by passing `evaluate` key with value of `False` in :param data:.
 
     Following code is valid and demonstrates work with shared data:
     >>> import datetime
@@ -90,8 +97,12 @@ def eval(data, sharedData=None, memo=None):
     """
     if memo is None:
         memo = dict()
-    if sharedData is None:
-        sharedData = dict()
+    if sharedData is not None:
+        warnings.warn('calldict.eval(sharedData=...) is renamed to "shared_data"', 
+                      DeprecationWarning)
+        shared_data = sharedData 
+    if shared_data is None:
+        shared_data = dict()
     if callable(data):
         pass
     elif isinstance(data, dict) or isinstance(data, list):
@@ -113,12 +124,12 @@ def eval(data, sharedData=None, memo=None):
                            0 if isinstance(x[1], dict) else
                            1 if isinstance(x[1], list) else 2
                            ):
-            y[k] = eval(v, sharedData=sharedData, memo=memo)
+            y[k] = eval(v, shared_data=shared_data, memo=memo)
         return y
     elif isinstance(data, SharedValue):
         try:
             # use well known format syntax to support attributes and indexes
-            return string.Formatter().get_field(data.name, [], sharedData)[0]
+            return string.Formatter().get_field(data.name, [], shared_data)[0]
         except KeyError:
             # value would not be populated if evaluation is in multiple stages/calls
             return data
@@ -131,21 +142,21 @@ def eval(data, sharedData=None, memo=None):
 
     # Evaluate data in sub structure
     data = data.copy()
-    data['args'] = [eval(v, sharedData=sharedData, memo=memo) for v in data.get('args', [])]
-    data['kwargs'] = dict([(k, eval(v, sharedData=sharedData, memo=memo)) for k, v in
+    data['args'] = [eval(v, shared_data=shared_data, memo=memo) for v in data.get('args', [])]
+    data['kwargs'] = dict([(k, eval(v, shared_data=shared_data, memo=memo)) for k, v in
                            data.get('kwargs', {}).items()])
-    data['func'] = eval(data['func'], sharedData=sharedData, memo=memo)
+    data['func'] = eval(data['func'], shared_data=shared_data, memo=memo)
 
     # Call itself
     r = data['func'](*data['args'], **data['kwargs'])
 
     if isinstance(r, SharedValue):
-        r = sharedData[r.name]
+        r = shared_data[r.name]
 
     if 'returns' in data:
         for v in data['returns'] if isinstance(data['returns'], list) else [data['returns']]:
             # support both, str and SharedValue instances
-            sharedData[v.name if isinstance(v, SharedValue) else v] = r
+            shared_data[v.name if isinstance(v, SharedValue) else v] = r
     return r
 
 
