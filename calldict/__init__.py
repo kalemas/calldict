@@ -39,6 +39,13 @@ class SharedValue(object):
             name = self.name + '.' + name
         return self.__class__(name)
 
+    def __getitem__(self, key):
+        key = '[' + key + ']'
+        if self.name is not None:
+            key = self.name + key
+        return self.__class__(key)
+
+
     def __repr__(self):
         v = super(SharedValue, self).__repr__()
         return v[:v.find(' object')] + ('.' +
@@ -56,7 +63,8 @@ class SharedValue(object):
             return data
         # use PEP-3101 field names specification to support attributes and
         # indexes
-        return string.Formatter().get_field(self.name, [], data)[0]
+        name = '0.' + self.name if self.name[0] != '[' else '0' + self.name
+        return string.Formatter().get_field(name, [data], {})[0]
 
 
 class SafeSharedValue(SharedValue):
@@ -177,7 +185,9 @@ def eval(data, shared_data=None, sharedData=None, memo=None):
         result = result.resolve(shared_data)
 
     if 'returns' in data:
-        for v in data['returns'] if isinstance(data['returns'], list) else [data['returns']]:
+        for v in data['returns'] if isinstance(data['returns'],
+                                               list) else [data['returns']]:
             # support both, str and SharedValue instances
-            shared_data[v.name if isinstance(v, SharedValue) else v] = result
+            shared_data[v.name.strip('[]') if isinstance(v, SharedValue
+                                                         ) else v] = result
     return result
