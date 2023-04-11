@@ -1,37 +1,80 @@
 """
-Call functions stored in a dictionaries.
+Protocol to markup and evaluate functions in python dictionaries.
 
-- Hm, don't you want to programming in YAML or JSON?
-- Nope, but to mix high level configuration with callable objects. Many programming approaches
-  could be brought to setting up application configuration and to writing application engine.
-  Configuration let you to oversee application logic and quickly change its behavior without
-  digging into code. And using callable objects in it gives you maximum flexibility before magic
-  parameters that wrap those callables.
+It helps with development of a domain model in Python data structure (the
+configuration) with function objects defined where dynamic behavior is
+required. So you could gain benefit from both functional and declarative
+approaches in your development.
+
+It is most powerful in conjunction with PyYAML as it allow to define runtime
+objects.
 """
 import string
 import warnings
 
 
 class SharedValue(object):
-    """Class to handle shared data identificators during evaluation."""
+    """
+    Class to handle shared data identifiers during evaluation.
+
+    `name` - string containing simple or compound field name according to
+        PEP 3101, it will be used to resolve value from given shared data.
+        For example `a[b]` will be resolved from `{'a': {'b': 'ok'}}` to `ok`.
+    """
+
+    def __new__(cls, *args, **kwargs):
+        instance = object.__new__(cls)
+        # PyYAML do not call initializer when constructing an instance that is
+        # derived from `type` (classes as well)
+        instance.__init__(*args, **kwargs)
+        return instance
+
     def __init__(self, name=None):
         self.name = name
 
     def __getattr__(self, name):
-        if self.name is None:
-            return SharedValue(name)
-        return SharedValue(self.name + '.' + name)
+        if name in {'__setstate__'}:
+            raise AttributeError
+        if self.name is not None:
+            name = self.name + '.' + name
+        return self.__class__(name)
 
     def __repr__(self):
         v = super(SharedValue, self).__repr__()
-        return v[:v.find(' object')] + '.' + self.name + '>'
+        return v[:v.find(' object')] + ('.' +
+                                        self.name if self.name else '') + '>'
 
     def __deepcopy__(self, memo):
-        return SharedValue(self.name)
+        return self
+
+    def __bool__(self):
+        """Raw SharedValue is not true data, it have to be resolved."""
+        return False
+
+    def resolve(self, data):
+        if not self.name:
+            return data
+        # use PEP-3101 field names specification to support attributes and
+        # indexes
+        return string.Formatter().get_field(self.name, [], data)[0]
+
+
+class SafeSharedValue(SharedValue):
+    """
+    Useful for multistage evaluation, when some values depends on other shared
+    values and have to be resolved in several evaluations.
+    """
+
+    def resolve(self, data):
+        try:
+            return super(SafeSharedValue, self).resolve(data)
+        except (AttributeError, KeyError):
+            return self
 
 
 # Root shared value
 shared = SharedValue()
+shared_safe = SafeSharedValue()
 
 # @todo add global data storage as necessary
 # @todo add threading support as necessary
@@ -77,33 +120,18 @@ def eval(data, shared_data=None, sharedData=None, memo=None):
     or modify :param data: before next `eval`) you can prevent arguments and function itself to
     be evaluated by passing `evaluate` key with value of `False` in :param data:.
 
-    Following code is valid and demonstrates work with shared data:
-    >>> import datetime
-    >>> calldict.eval([
-    >>>     # store current time in SharedValue("now")
-    >>>     dict(func=datetime.datetime.now, returns=calldict.shared.now),
-    >>>     # do a long operation
-    >>>     dict(func=range, args=[10000000]),
-    >>>     # evaluate substitution of saved time
-    >>>     dict(func=calldict.shared.now.__sub__, args=[
-    >>>         # evaluate current time again
-    >>>         dict(func=datetime.datetime.now)
-    >>>     ]),
-    >>>     # accessing shared value by field path (use class constructor as
-    >>>     `calldict.shared.var[0][key][2]` is incorrect Python syntax)
-    >>>     dict(func=list, args=[[dict(key=[1, 2, datetime])]], returns=calldict.shared.var),
-    >>>     calldict.SharedValue("var[0][key][2].datetime.now"),
-    >>> ])
+    For demonstration on how shared data work, see test_shared_value_datetime() in tests.
     """
     if memo is None:
         memo = dict()
     if sharedData is not None:
-        warnings.warn('calldict.eval(sharedData=...) is renamed to "shared_data"', 
-                      DeprecationWarning)
-        shared_data = sharedData 
+        warnings.warn(
+            'calldict.eval(sharedData=...) is renamed to "shared_data"',
+            DeprecationWarning)
+        shared_data = sharedData
     if shared_data is None:
         shared_data = dict()
-    if callable(data):
+    if is_callable(data):
         pass
     elif isinstance(data, dict) or isinstance(data, list):
         # calldict implement kind of deepcopy behavior, we do not support it completely but use
@@ -127,12 +155,7 @@ def eval(data, shared_data=None, sharedData=None, memo=None):
             y[k] = eval(v, shared_data=shared_data, memo=memo)
         return y
     elif isinstance(data, SharedValue):
-        try:
-            # use well known format syntax to support attributes and indexes
-            return string.Formatter().get_field(data.name, [], shared_data)[0]
-        except KeyError:
-            # value would not be populated if evaluation is in multiple stages/calls
-            return data
+        return data.resolve(shared_data)
     else:
         return data
 
@@ -148,108 +171,13 @@ def eval(data, shared_data=None, sharedData=None, memo=None):
     data['func'] = eval(data['func'], shared_data=shared_data, memo=memo)
 
     # Call itself
-    r = data['func'](*data['args'], **data['kwargs'])
+    result = data['func'](*data['args'], **data['kwargs'])
 
-    if isinstance(r, SharedValue):
-        r = shared_data[r.name]
+    if isinstance(result, SharedValue):
+        result = result.resolve(shared_data)
 
     if 'returns' in data:
         for v in data['returns'] if isinstance(data['returns'], list) else [data['returns']]:
             # support both, str and SharedValue instances
-            shared_data[v.name if isinstance(v, SharedValue) else v] = r
-    return r
-
-
-if __name__ == '__main__':
-    import pprint
-    import sys
-    import textwrap
-
-    import yaml
-    import calldict
-
-    def constructor(self, suffix, node):
-        """Simple YAML constructor to simplify definition."""
-        moduleName, objectPath = self.construct_scalar(node).split(' ')
-        __import__(moduleName)
-        obj = sys.modules[moduleName]
-        for a in objectPath.split('.'):
-            obj = getattr(obj, a)
-        return obj
-
-    yaml.add_multi_constructor('!runtime', constructor)
-
-    # PyYAML with custom convenience constructor
-    pprint.pprint(calldict.eval(yaml.load(textwrap.dedent("""
-        -   func: !runtime __builtin__ open
-            args:
-            -   func: !runtime tempfile mktemp
-                kwargs:
-                    suffix: .txt
-                returns: !runtime calldict shared.path
-            -   w
-            returns: !runtime calldict shared.file
-        -   func: !runtime calldict shared.file.write
-            args: [Hello world!!!]
-        -   &close
-            func: !runtime calldict shared.file.close
-        -   func: !runtime __builtin__ open
-            args:
-            -   !runtime calldict shared.path
-            -   r
-            returns: !runtime calldict shared.file
-        -   func: !runtime calldict shared.file.read
-        -   *close
-    """))))
-
-    # out of the box PyYAML:
-    pprint.pprint(calldict.eval(yaml.load(textwrap.dedent("""
-        -   func: !!python/name:tempfile.mktemp
-            kwargs:
-                suffix: .txt
-            returns: path
-        -   func: !!python/name:__builtin__.open
-            args:
-            -   !!python/object/apply:__builtin__.getattr
-                args:
-                -   !!python/name:calldict.shared
-                -   path
-            -   w
-            returns: file
-        -   func:
-                func: !!python/name:calldict.eval
-                args:
-                -   args:
-                    -   &file
-                        !!python/object/apply:__builtin__.getattr
-                        args:
-                        -   !!python/name:calldict.shared
-                        -   file
-                    -   write
-                    func: !!python/name:__builtin__.getattr
-            args: [Hello world!!!]
-        -   &close
-            func:
-                func: !!python/name:calldict.eval
-                args:
-                -   args:
-                    -   *file
-                    -   close
-                    func: !!python/name:__builtin__.getattr
-        -   func: !!python/name:__builtin__.open
-            args:
-            -   !!python/object/apply:__builtin__.getattr
-                args:
-                -   !!python/name:calldict.shared
-                -   path
-            -   r
-            returns: *file
-        -   func:
-                func: !!python/name:calldict.eval
-                args:
-                -   args:
-                    -   *file
-                    -   read
-                    func: !!python/name:__builtin__.getattr
-        -   *close
-    """))))
+            shared_data[v.name if isinstance(v, SharedValue) else v] = result
+    return result

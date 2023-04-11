@@ -4,7 +4,7 @@ setup(
     name='calldict',
     packages=['calldict'],
     version='0.4',
-    description='Call functions stored in a dictionaries',
+    description='Protocol to markup and evaluate functions in data structures',
     author='Konstantin Maslyuk',
     author_email='kostyamaslyuk@gmail.com',
     url='https://github.com/kalemas/calldict',
