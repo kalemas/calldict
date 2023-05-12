@@ -181,3 +181,16 @@ def test_from_yaml():
                     -   read
         -   *close
     """))[-2] == 'Hello world!!!'
+
+
+def test_pass_whole_shareddata():
+    data = {'test': {'arg': 1}}
+
+    def func(test=None, **kwargs):
+        return kwargs.get('arg') or test['arg']
+
+    assert calldict.eval({'func': func, 'kwargs': calldict.shared},
+                         shared_data=data) == 1
+
+    assert calldict.eval({'func': func, 'kwargs': calldict.shared['test']},
+                         shared_data=data) == 1

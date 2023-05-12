@@ -174,8 +174,12 @@ def eval(data, shared_data=None, sharedData=None, memo=None):
     # Evaluate data in sub structure
     data = data.copy()
     data['args'] = [eval(v, shared_data=shared_data, memo=memo) for v in data.get('args', [])]
-    data['kwargs'] = dict([(k, eval(v, shared_data=shared_data, memo=memo)) for k, v in
-                           data.get('kwargs', {}).items()])
+    kwargs = data.get('kwargs', {})
+    if isinstance(kwargs, SharedValue):
+        data['kwargs'] = kwargs.resolve(shared_data)
+    else:
+        data['kwargs'] = dict([(k, eval(v, shared_data=shared_data, memo=memo))
+                               for k, v in kwargs.items()])
     data['func'] = eval(data['func'], shared_data=shared_data, memo=memo)
 
     # Call itself
