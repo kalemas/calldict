@@ -171,19 +171,15 @@ def eval(data, shared_data=None, sharedData=None, memo=None):
     if not data.get('evaluate', True):
         return dict((x, y) for x, y in data.items() if x != 'evaluate')
 
-    # Evaluate data in sub structure
+    # Evaluate call parameters
     data = data.copy()
-    data['args'] = [eval(v, shared_data=shared_data, memo=memo) for v in data.get('args', [])]
-    kwargs = data.get('kwargs', {})
-    if isinstance(kwargs, SharedValue):
-        data['kwargs'] = kwargs.resolve(shared_data)
-    else:
-        data['kwargs'] = dict([(k, eval(v, shared_data=shared_data, memo=memo))
-                               for k, v in kwargs.items()])
-    data['func'] = eval(data['func'], shared_data=shared_data, memo=memo)
+    for k, v in data.items():
+        if k in ['returns']:
+            continue
+        data[k] = eval(v, shared_data=shared_data, memo=memo)
 
     # Call itself
-    result = data['func'](*data['args'], **data['kwargs'])
+    result = data['func'](*data.get('args', []), **data.get('kwargs', {}))
 
     if isinstance(result, SharedValue):
         result = result.resolve(shared_data)

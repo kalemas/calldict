@@ -194,3 +194,9 @@ def test_pass_whole_shareddata():
 
     assert calldict.eval({'func': func, 'kwargs': calldict.shared['test']},
                          shared_data=data) == 1
+
+
+def test_evaluate_params_by_type():
+    data = {'func': sum, 'args': {'func': list, 'args': [[[[2]], [1]]]}}
+
+    assert calldict.eval(data) == [1, 2]
