@@ -6,11 +6,10 @@ configuration) with function objects defined where dynamic behavior is
 required. So you could gain benefit from both functional and declarative
 approaches in your development.
 
-It is most powerful in conjunction with PyYAML as it allow to define runtime
-objects.
+It is most powerful in conjunction with PyYAML as it allows to define
+runtime objects.
 """
 import string
-import warnings
 
 
 class SharedValue(object):
@@ -44,7 +43,6 @@ class SharedValue(object):
         if self.name is not None:
             key = self.name + key
         return self.__class__(key)
-
 
     def __repr__(self):
         v = super(SharedValue, self).__repr__()
@@ -84,21 +82,15 @@ class SafeSharedValue(SharedValue):
 shared = SharedValue()
 shared_safe = SafeSharedValue()
 
-# @todo add global data storage as necessary
-# @todo add threading support as necessary
+# TODO add global data storage as necessary
+# TODO add threading support as necessary
 
 
 def is_callable(data):
     return isinstance(data, dict) and 'func' in data
 
 
-def callable(data):
-    warnings.warn('calldict.callable renamed to is_callable',
-                  DeprecationWarning)
-    return is_callable(data)
-
-
-def eval(data, shared_data=None, sharedData=None, memo=None):
+def eval(data, shared_data=None, skipper=None, memo=None):
     """
     Evaluate given :param data: and return result.
 
@@ -106,77 +98,95 @@ def eval(data, shared_data=None, sharedData=None, memo=None):
         {
             "func": function object that will be called
             "args": list of arguments
-            "kwargs": dict of keyworded arguments
-            "returns": calldict.SharedValue instance or str of a name where the result of current
-                       evaluation will be stored in :param shared_data:
-            "evaluate": bool whether we need of prevent evaluation of sub structure
+            "kwargs": dict of keyword arguments
+            "skipper": Callable(object: Union[Sequence, Mapping],
+                key: Hashable) -> bool, return True if nested data should
+                not be evaluated
+            "returns": calldict.SharedValue instance or str of a name where
+                the result of current evaluation will be stored in
+                :param shared_data:
+            "evaluate": bool whether we need of prevent evaluation of sub
+                structure
         }
         This parameter is passed by copying.
 
-    Only dictionaries with "func" keys are considered as a subject of evaluation, otherwise they
-    are considered as regular dictionaries and only nested data is evaluated.
+    Only dictionaries with "func" keys are considered as a subject of
+    evaluation, otherwise they are considered as regular dictionaries and
+    only nested data is evaluated.
 
-    Arguments may be data, another function evaluations or a SharedValue instances. SharedValue is
-    constructed with a name and also supports `field_name` of `format string syntax
-    <https://docs.python.org/2.7/library/string.html#format-string-syntax>`_ (PEP3101). Simplest
-    way to access them is by attributes of `calldict.shared` global variable.
+    Arguments may be data, another function evaluations or a SharedValue
+    instances. SharedValue is constructed with a name and also supports
+    `field_name` of `format string syntax
+    <https://docs.python.org/2.7/library/string.html#format-string-syntax>`_
+    (PEP3101). Simplest way to access them is by attributes of
+    `calldict.shared` global variable.
 
-    You can pass :param shared_data: dictionary from outer stack into evaluation to pass a variable
-    or get evaluated shared values after evaluation.
+    You can pass :param shared_data: dictionary from outer stack into
+    evaluation to pass a variable or get evaluated shared values after
+    evaluation.
 
-    If you need to do `eval` calls on several stages (with passing different :param shared_data:
-    or modify :param data: before next `eval`) you can prevent arguments and function itself to
-    be evaluated by passing `evaluate` key with value of `False` in :param data:.
+    If you need to do `eval` calls on several stages (with passing different
+    :param shared_data: or modify :param data: before next `eval`) you can
+    prevent arguments and function itself to be evaluated by passing
+    `evaluate` key with value of `False` in :param data:.
 
-    For demonstration on how shared data work, see test_shared_value_datetime() in tests.
+    For demonstration on how shared data work, see
+    test_shared_value_datetime() in tests.
     """
     if memo is None:
         memo = dict()
-    if sharedData is not None:
-        warnings.warn(
-            'calldict.eval(sharedData=...) is renamed to "shared_data"',
-            DeprecationWarning)
-        shared_data = sharedData
     if shared_data is None:
         shared_data = dict()
+    # calldict implement kind of deepcopy behavior, we do not support it
+    # completely but use this way to handle recursive data and to skip
+    # evaluation
+    memo_id = id(data)
+    if memo_id in memo:
+        return memo[memo_id]
     if is_callable(data):
         pass
-    elif isinstance(data, dict) or isinstance(data, list):
-        # calldict implement kind of deepcopy behavior, we do not support it completely but use
-        # such way to handle recursive data
-        d = id(data)
-        if d in memo:
-            return memo[d]
+    elif isinstance(data, (dict, list)):
         if isinstance(data, dict):
             y = type(data)()
             items = data.items()
         else:
             y = data[:]
             items = enumerate(data)
-        memo[d] = y
-        # first we process dictionaries as they could be evaluations and return shared data
-        # last we process primitive types as they could be shared data references
-        for k, v in sorted(items, key=lambda x:
-                           0 if isinstance(x[1], dict) else
-                           1 if isinstance(x[1], list) else 2
-                           ):
-            y[k] = eval(v, shared_data=shared_data, memo=memo)
+        memo[memo_id] = y
+        # first we process dictionaries as they could be evaluations and
+        # return shared data last we process primitive types as they could
+        # be shared data references
+        for k, v in sorted(items,
+                           key=lambda x: 0 if isinstance(x[1], dict) else 1
+                           if isinstance(x[1], list) else 2):
+            if skipper and skipper(data, k):
+                y[k] = v
+            else:
+                y[k] = eval(v,
+                            shared_data=shared_data,
+                            skipper=skipper,
+                            memo=memo)
         return y
     elif isinstance(data, SharedValue):
         return data.resolve(shared_data)
     else:
         return data
 
-    # @todo make following parameter as integer to allow multilevel precessing
     if not data.get('evaluate', True):
         return dict((x, y) for x, y in data.items() if x != 'evaluate')
 
     # Evaluate call parameters
     data = data.copy()
     for k, v in data.items():
-        if k in ['returns']:
+        if k in ('returns', ):
             continue
-        data[k] = eval(v, shared_data=shared_data, memo=memo)
+        if skipper and skipper(data, k):
+            data[k] = v
+        else:
+            data[k] = eval(v,
+                           shared_data=shared_data,
+                           skipper=skipper,
+                           memo=memo)
 
     # Call itself
     result = data['func'](*data.get('args', []), **data.get('kwargs', {}))

@@ -6,9 +6,13 @@
     ],
     "files.trimTrailingWhitespace": true,
     "python.testing.pytestArgs": [
-        "."
+        ".",
+        "-s",
     ],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
-    "python.formatting.provider": "yapf",
+    "editor.formatOnType": false,
+    "cSpell.words": [
+        "calldict"
+    ],
 }
