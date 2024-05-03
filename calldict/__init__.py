@@ -189,7 +189,15 @@ def eval(data, shared_data=None, skipper=None, memo=None):
                            memo=memo)
 
     # Call itself
-    result = data['func'](*data.get('args', []), **data.get('kwargs', {}))
+    if 'kwargs' not in data:
+        kwargs = {
+            k: v
+            for k, v in data.items()
+            if k not in {'returns', 'args', 'func', 'skipper', 'evaluate'}
+        }
+    else:
+        kwargs = data['kwargs']
+    result = data['func'](*data.get('args', []), **kwargs)
 
     if isinstance(result, SharedValue):
         result = result.resolve(shared_data)

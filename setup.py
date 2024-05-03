@@ -3,7 +3,7 @@ from setuptools import setup
 setup(
     name='calldict',
     packages=['calldict'],
-    version='0.9',
+    version='0.10',
     description='Protocol to markup and evaluate functions in data structures',
     author='Konstantin Maslyuk',
     author_email='kostyamaslyuk@gmail.com',

@@ -359,3 +359,25 @@ def test_recursive_evaluation():
     expression['args'].append([expression])
     result = calldict.eval(calldict.eval(expression))
     assert result[0][0][0][0] is expression
+
+
+def test_simpler_kwargs():
+    def func(a, param=None, **kw):
+        return kw[param]
+
+    expression = {
+        'func': func,
+        'param': 'c',
+        'a': 'a',
+        'c': 'c',
+    }
+    assert calldict.eval(expression) == 'c'
+    expression = {
+        'func': func,
+        'kwargs': {
+            'param': 'c',
+            'c': 'c',
+        },
+        'args': ['a'],
+    }
+    assert calldict.eval(expression) == 'c'
