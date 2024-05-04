@@ -12,6 +12,9 @@ runtime objects.
 import string
 
 
+__primitive_types__ = (bool, str, int, float, type(None))
+
+
 class SharedValue(object):
     """
     Class to handle shared data identifiers during evaluation.
@@ -87,7 +90,10 @@ shared_safe = SafeSharedValue()
 
 
 def is_callable(data):
-    return isinstance(data, dict) and 'func' in data
+    # 'func' would be SharedValue or another calldict, filter primitives
+    # for a while
+    return isinstance(data, dict) and 'func' in data and not isinstance(
+        data['func'], __primitive_types__)
 
 
 def eval(data, shared_data=None, skipper=None, memo=None):
