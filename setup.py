@@ -12,7 +12,7 @@ setup(
     keywords=['dict', 'evaluation', 'yaml'],
     classifiers=[],
     extras_require={
-        'dev': ['yapf'],
+        'dev': ['twine', 'yapf'],
         'test': ['PyYAML', 'pytest'],
     },
 )
