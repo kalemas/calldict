@@ -96,6 +96,19 @@ def is_callable(data):
         data['func'], __primitive_types__)
 
 
+def _put_return_value(value, key, data):
+    for v in key if isinstance(key, list) else [key]:
+        # support both, str and SharedValue instances
+        path = [
+            i for i in (v.name if isinstance(v, SharedValue) else v
+                        ).replace(']', '').split('[') if i
+        ]
+        d = data
+        for p in path[:-1]:
+            d = d[p]
+        d[path[-1]] = value
+
+
 def eval(data, shared_data=None, skipper=None, memo=None):
     """
     Evaluate given :param data: and return result.
@@ -209,9 +222,5 @@ def eval(data, shared_data=None, skipper=None, memo=None):
         result = result.resolve(shared_data)
 
     if 'returns' in data:
-        for v in data['returns'] if isinstance(data['returns'],
-                                               list) else [data['returns']]:
-            # support both, str and SharedValue instances
-            shared_data[v.name.strip('[]') if isinstance(v, SharedValue
-                                                         ) else v] = result
+        _put_return_value(result, data['returns'], shared_data)
     return result

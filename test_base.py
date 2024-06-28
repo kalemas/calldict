@@ -381,3 +381,15 @@ def test_simpler_kwargs():
         'args': ['a'],
     }
     assert calldict.eval(expression) == 'c'
+
+
+def test_return_deep():
+    data = {'a': {'b': {}}}
+    calldict.eval(
+        {
+            'func': sum,
+            'args': [[2, 2]],
+            'returns': 'a[b][c]'
+        },
+        shared_data=data)
+    assert data['a']['b']['c'] == 4
