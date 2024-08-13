@@ -42,7 +42,7 @@ class SharedValue(object):
         return self.__class__(name)
 
     def __getitem__(self, key):
-        key = '[' + key + ']'
+        key = '[{}]'.format(key)
         if self.name is not None:
             key = self.name + key
         return self.__class__(key)

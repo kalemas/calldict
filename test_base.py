@@ -9,6 +9,17 @@ import yaml
 import calldict
 
 
+def constructor(self, suffix, node):
+    """Simple YAML constructor to simplify definition."""
+    moduleName, objectPath = self.construct_scalar(node).split(' ')
+    __import__(moduleName)
+    obj = sys.modules[moduleName]
+    obj = string.Formatter().get_field('0.' + objectPath, [obj], {})[0]
+    return obj
+
+yaml.add_multi_constructor('!runtime', constructor)
+
+
 def yaml_load(text):
 
     def compatibility(text):
@@ -122,17 +133,6 @@ def test_callable():
 
 
 def test_from_yaml():
-
-    def constructor(self, suffix, node):
-        """Simple YAML constructor to simplify definition."""
-        moduleName, objectPath = self.construct_scalar(node).split(' ')
-        __import__(moduleName)
-        obj = sys.modules[moduleName]
-        obj = string.Formatter().get_field('0.' + objectPath, [obj], {})[0]
-        return obj
-
-    yaml.add_multi_constructor('!runtime', constructor)
-
     # PyYAML with custom convenience constructor
     assert calldict.eval(
         yaml_load("""
@@ -393,3 +393,9 @@ def test_return_deep():
         },
         shared_data=data)
     assert data['a']['b']['c'] == 4
+
+
+def test_deep_get_from_list():
+    data = {'a': [3, 2, 1, 0]}
+    assert calldict.eval(yaml_load('!runtime calldict shared[a][2]'),
+                         shared_data=data) == data['a'][2]
